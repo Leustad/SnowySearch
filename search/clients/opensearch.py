@@ -19,9 +19,8 @@ class OpensearchClient:
             ssl_show_warn=False,
         )
 
-    def create_index(self, client=None, index_name: str = None):
+    def create_index(self, index_name: str = None):
         try:
-            body = ""
             if index_name == "news":
                 mappings_path = news_mappings_path
             else:

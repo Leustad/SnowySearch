@@ -1,0 +1,58 @@
+version: '3'
+services:
+  app:
+    container_name: snowy-search
+    build:
+      context: "."
+      args:
+        - ENVIRONMENT=dev
+        - BUILD_ENV=DEV
+    volumes:
+      - "${PWD}:/search"
+    ports:
+      - "8080:80"
+    depends_on:
+      - postgres
+      - pgadmin
+    environment:
+      - VIRTUAL_HOST=osfastapi.docker
+    networks:
+      - snowsearch-net
+    env_file:
+      - ".env"
+
+  postgres:
+    image: postgres:latest
+    container_name: search-postgres
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: public
+    volumes:
+      - search_db:/var/lib/postgresql
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - snowsearch-net
+
+  pgadmin:
+    container_name: pgadmin4_container
+    image: dpage/pgadmin4
+    restart: always
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@admin.com
+      PGADMIN_DEFAULT_PASSWORD: admin
+    ports:
+      - "5050:80"
+    depends_on:
+      - postgres
+    networks:
+      - snowsearch-net
+volumes:
+  search_db:
+    driver: local
+
+networks:
+  snowsearch-net:
+    external:
+      name: opensearch-net

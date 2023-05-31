@@ -5,9 +5,6 @@ from typing import List
 from opensearchpy import OpenSearch
 from opensearchpy.helpers import bulk
 
-host = "opensearch-node1"
-port = 9200
-auth = ("admin", "admin")
 news_mappings_path = "../resources/mappings/news.json"
 
 

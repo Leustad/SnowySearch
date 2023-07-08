@@ -14,3 +14,4 @@ class News(Base):
     article_insert_date = Column(DateTime, nullable=False, server_default=func.now())
     article_publish_date = Column(DateTime, nullable=False)
     text = Column(String, nullable=False)
+    title_hash = Column(String, nullable=False, index=True, unique=True)

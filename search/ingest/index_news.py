@@ -1,5 +1,7 @@
+import hashlib
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta, date
+from time import sleep
 from typing import List
 
 import requests
@@ -13,7 +15,7 @@ from search.db.db import db_session
 from search.db.models import News
 
 # index_name = "hacker_news"
-URL = "https://news.ycombinator.com/"
+URL = "https://news.ycombinator.com"
 
 router = APIRouter(
     prefix="/ingest",
@@ -68,7 +70,10 @@ def _insert_data(data: List):
         session = db_session()
         for item in data:
             _ = News(
-                url=item["link"], text=item["text"], article_publish_date=item["age"]
+                url=item["link"],
+                text=item["text"],
+                article_publish_date=item["age"],
+                title_hash=item['title_hash']
             )
             session.add(_)
 
@@ -78,56 +83,77 @@ def _insert_data(data: List):
         logging.error(f"<< DB Insert Error: {e}")
 
 
-def _crawl(url: str):
+def _crawl(url: str, target_date: str = None):
     """
     Crawl Hacker News
     :return: List of Dicts
     """
-    next_page = "?p=2"
-    latest_publish_date = _get_last_publish_date()
-    response = requests.get(url)
-    html_content = response.text
+    title_hash_set = set()
+    if not target_date:
+        target_date = date.today() - timedelta(days=1)
+        target_date = datetime.strftime(target_date, '%Y-%m-%d')
+
+    else:
+        try:
+            # Validate date format
+            _ = datetime.strptime(target_date, '%Y-%m-%d')
+        except ValueError as e:
+            logging.error(f'Target Date error: {e}')
+
     data = []
+    page = 1
 
-    # Parse the HTML content using BeautifulSoup
-    soup = BeautifulSoup(html_content, "html.parser")
+    while True:
+        print(f"{url}/front?day={target_date}&p={page}")
+        response = requests.get(f"{url}/front?day={target_date}&p={page}")
+        html_content = response.text
 
-    # Find all entries with class "athing"
-    entries = soup.find_all("tr", class_="athing")
+        # Parse the HTML content using BeautifulSoup
+        soup = BeautifulSoup(html_content, "html.parser")
 
-    # Iterate over the entries and extract the required information
-    for entry in entries:
-        # Extract the href value and text associated with the "a" tag within class "titleline"
-        titleline = entry.find("span", class_="titleline")
-        link = titleline.find("a")
-        href = link["href"]
-        text = link.text.strip()
+        # Find all entries with class "athing"
+        entries = soup.find_all("tr", class_="athing")
+        print(len(entries))
+        if not entries:
+            print(f'BREAK at page: {page}')
+            break
 
-        # Find the next "tr" element and extract the value of the "title" attribute within class "age"
-        age_element = entry.find_next_sibling("tr").find("span", class_="age")
-        age = age_element["title"]
-
-        # Prevent inserting already inserted documents
-        if latest_publish_date:
-            if latest_publish_date >= datetime.strptime(age, "%Y-%m-%dT%H:%M:%S"):
+        # Iterate over the entries and extract the required information
+        for entry in entries:
+            # Extract the href value and text associated with the "a" tag within class "titleline"
+            titleline = entry.find("span", class_="titleline")
+            title_hash = hashlib.shake_128(titleline.encode('utf-8')).hexdigest(12)
+            if _title_hash_exist(title_hash=title_hash) or title_hash in title_hash_set:
                 break
 
-        # Print the extracted information
-        data.append({"link": href, "text": text, "age": age})
+            title_hash_set.add(title_hash)
+            link = titleline.find("a")
+            href = link["href"]
+            text = link.text.strip()
+
+            # Find the next "tr" element and extract the value of the "title" attribute within class "age"
+            age_element = entry.find_next_sibling("tr").find("span", class_="age")
+            age = age_element["title"]
+
+            # Print the extracted information
+            data.append({"link": href, "text": text, "age": age, "title_hash": title_hash})
+        page += 1
+        sleep(1)
+
     return data
 
 
-def _get_last_publish_date():
+def _title_hash_exist(title_hash:str):
     """
     Get last publish date from DB
     :return: Datetime obj | None
     """
     session = db_session()
-    latest_publish_date = (
-        session.query(News.article_publish_date)
-        .order_by(desc(News.article_publish_date))
-        .first()
+    exists = (
+        session.query(News.title_hash)
+        .filter_by(title_hash=title_hash)
+        .scalar() is not None
     )
 
     # Access the value
-    return latest_publish_date[0] if latest_publish_date else None
+    return exists

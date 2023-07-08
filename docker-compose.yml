@@ -16,6 +16,8 @@ services:
       - pgadmin
     environment:
       - VIRTUAL_HOST=osfastapi.docker
+      - PYTHONUNBUFFERED=1
+      - TZ=America/Chicago
     networks:
       - snowsearch-net
     env_file:
